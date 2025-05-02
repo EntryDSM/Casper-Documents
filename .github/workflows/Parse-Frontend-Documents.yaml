@@ -1,0 +1,60 @@
+name: Parse Frontend Documents
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'documents/frontend/*.md'
+  pull_request:
+    branches: [ master ]
+    paths:
+      - 'documents/frontend/*.md'
+  workflow_dispatch:
+
+jobs:
+  validate-and-parse-frontend-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup permissions
+        run: |
+          chmod +x ./script/parsing-entf.sh
+          chmod +x ./script/validate-entf.sh
+
+      - name: Validate frontend documents
+        run: |
+          VALIDATION_FAILED=0
+          for file in documents/frontend/*.md; do
+            if [ -f "$file" ]; then
+              echo "Validating frontend file: $file"
+              if ! ./script/validate-entf.sh "$file"; then
+                VALIDATION_FAILED=1
+              fi
+            fi
+          done
+          
+          if [ $VALIDATION_FAILED -eq 1 ]; then
+            echo "Validation failed for one or more frontend documents. Please fix the issues and try again."
+            exit 1
+          fi
+
+      - name: Run frontend document parser
+        run: |
+          for file in documents/frontend/*.md; do
+            if [ -f "$file" ]; then
+              echo "Parsing frontend file: $file"
+              ./script/parsing-entf.sh "$file"
+            fi
+          done
+
+      - name: Commit parsed documents
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add documents/component/
+          git add documents/function/
+          git commit -m "자동 프론트엔드 문서 생성: $(date +%Y-%m-%d)" || echo "No changes to commit"
+          git push
