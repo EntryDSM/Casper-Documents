@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# 프로젝트 루트 디렉토리 저장
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+cd "$PROJECT_ROOT"
+
+echo "Casper Documents 유효성 검사를 시작합니다..."
+
+# 스크립트 실행 권한 확인 및 부여
+if [ ! -x "$PROJECT_ROOT/script/validate-entb.sh" ]; then
+  chmod +x "$PROJECT_ROOT/script/validate-entb.sh"
+fi
+if [ ! -x "$PROJECT_ROOT/script/validate-entf.sh" ]; then
+  chmod +x "$PROJECT_ROOT/script/validate-entf.sh"
+fi
+
+# 스테이징된 파일 목록 확인
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+# 백엔드 문서 필터링
+BACKEND_FILES=$(echo "$STAGED_FILES" | grep -E "^documents/backend/.*\.md$" || true)
+# 프론트엔드 문서 필터링
+FRONTEND_FILES=$(echo "$STAGED_FILES" | grep -E "^documents/frontend/.*\.md$" || true)
+
+if [ -z "$BACKEND_FILES" ] && [ -z "$FRONTEND_FILES" ]; then
+  echo "검사할 문서 파일이 없습니다. 유효성 검사를 건너뜁니다."
+  exit 0
+fi
+
+# 유효성 검사 실패 여부 플래그
+VALIDATION_FAILED=0
+
+# 백엔드 문서 유효성 검사
+if [ -n "$BACKEND_FILES" ]; then
+  echo "백엔드 문서 유효성 검사 시작..."
+  
+  for file in $BACKEND_FILES; do
+    echo "검사 중: $file"
+    if ! "$PROJECT_ROOT/script/validate-entb.sh" "$file"; then
+      VALIDATION_FAILED=1
+      echo "오류: '$file' 파일의 유효성 검사에 실패했습니다."
+    else
+      echo "통과: '$file' 파일의 유효성 검사에 성공했습니다."
+    fi
+  done
+fi
+
+# 프론트엔드 문서 유효성 검사
+if [ -n "$FRONTEND_FILES" ]; then
+  echo "프론트엔드 문서 유효성 검사 시작..."
+  
+  for file in $FRONTEND_FILES; do
+    echo "검사 중: $file"
+    if ! "$PROJECT_ROOT/script/validate-entf.sh" "$file"; then
+      VALIDATION_FAILED=1
+      echo "오류: '$file' 파일의 유효성 검사에 실패했습니다."
+    else
+      echo "통과: '$file' 파일의 유효성 검사에 성공했습니다."
+    fi
+  done
+fi
+
+# 유효성 검사 결과 확인
+if [ $VALIDATION_FAILED -eq 1 ]; then
+  echo "=================================================================="
+  echo "  오류: 하나 이상의 문서 파일이 유효성 검사에 실패했습니다."
+  echo "  문제를 수정한 후 다시 커밋해주세요."
+  echo "=================================================================="
+  exit 1
+else
+  echo "모든 문서 파일이 유효성 검사를 통과했습니다. 커밋을 진행합니다."
+  exit 0
+fi
