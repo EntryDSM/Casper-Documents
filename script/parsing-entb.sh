@@ -33,6 +33,9 @@ entity_content=$(sed -n '/^Entity$/,/^```$/p' "$file_path" | sed '1d;$d')
 request_content=$(sed -n '/^Request Object$/,/^```$/p' "$file_path" | sed '1d;$d')
 response_content=$(sed -n '/^Response Object$/,/^```$/p' "$file_path" | sed '1d;$d')
 
+# Extract API error information
+api_errors=$(sed -n '/^API 오류 반환 :/,/^---/p' "$file_path" | grep -v "^API 오류 반환 :" | grep -v "^---" | sed '/^$/d')
+
 # Extract dependencies
 dependencies=$(grep "^impl " "$file_path" | sed 's/^impl /- /')
 
@@ -51,13 +54,13 @@ while IFS= read -r api_line; do
         requires_auth=$(echo "$api_line" | awk '{print $7}')
         req_obj=$(echo "$api_line" | awk '{print $9}')
         resp_obj=$(echo "$api_line" | awk '{print $11}')
-
+        
         # Clean path for filename
         clean_path=$(echo "$path" | tr '/' '-' | sed 's/^-//')
-
+        
         # Create API documentation for this endpoint
         api_doc_file="documents/api/${http_method}-${clean_path}.md"
-
+        
         cat > "$api_doc_file" << EOT
 # ${http_method} ${path}
 
@@ -83,10 +86,13 @@ ${request_content}
 ${response_content}
 \`\`\`
 
+## Error Responses
+${api_errors}
+
 ## Dependencies
 ${dependencies}
 EOT
-
+        
         echo "Generated API documentation: $api_doc_file"
         ((api_count++))
     fi
@@ -143,6 +149,10 @@ func_doc_file="documents/function/${safe_title}.md"
     done <<< "$api_lines"
 
     echo "\`\`\`"
+    echo
+    echo "## Error Handling"
+    echo
+    echo "${api_errors}"
     echo
     echo "## Dependencies"
     echo "${dependencies}"
