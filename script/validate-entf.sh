@@ -20,7 +20,9 @@ echo "Validating frontend file: $file_path"
 
 # Initialize error flag and error message
 has_error=0
+has_warning=0
 error_message=""
+warning_message=""
 
 # Check for required sections
 check_section() {
@@ -114,17 +116,33 @@ check_subsection "의존성" "$file_path"
 check_subsection "트러블슈팅" "$file_path"
 
 # Check for dependencies
-if ! grep -q "^\"의존성" "$file_path"; then
-    has_error=1
-    error_message="${error_message}Warning: No dependencies defined. If your component has dependencies, please list them\n"
+if grep -q "^\".*\".*:" "$file_path"; then
+    # Dependencies defined correctly
+    :
+elif grep -q "^\"의존성" "$file_path"; then
+    # Dependencies section exists but might be in the wrong format
+    has_warning=1
+    warning_message="${warning_message}Warning: Dependencies section exists but might not be in the correct format. Use the format \"dependency\": \"version\"\n"
+else
+    # No dependencies defined
+    has_warning=1
+    warning_message="${warning_message}Warning: No dependencies defined. If your component has dependencies, please list them\n"
 fi
 
 # Output validation results
+if [ $has_warning -eq 1 ]; then
+    echo -e "${warning_message}"
+fi
+
 if [ $has_error -eq 1 ]; then
     echo -e "${error_message}"
     echo "Validation failed for $file_path"
     exit 1
 else
-    echo "Validation passed for $file_path"
+    if [ $has_warning -eq 1 ]; then
+        echo "Validation passed with warnings for $file_path"
+    else
+        echo "Validation passed for $file_path"
+    fi
     exit 0
 fi

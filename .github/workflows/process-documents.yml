@@ -1,0 +1,83 @@
+name: Process All Documents
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'documents/backend/*.md'
+      - 'documents/frontend/*.md'
+  pull_request:
+    branches:
+      - '**'
+    paths:
+      - 'documents/backend/*.md'
+      - 'documents/frontend/*.md'
+  workflow_dispatch:
+
+jobs:
+  process-documents:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup permissions
+        run: |
+          chmod +x ./script/parsing-entb.sh
+          chmod +x ./script/parsing-entf.sh
+          chmod +x ./script/validate-entb.sh
+          chmod +x ./script/validate-entf.sh
+
+      - name: Check modified files
+        id: check-files
+        run: |
+          echo "backend_changed=false" >> $GITHUB_OUTPUT
+          echo "frontend_changed=false" >> $GITHUB_OUTPUT
+          
+          git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q 'documents/backend/' && echo "backend_changed=true" >> $GITHUB_OUTPUT
+          git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -q 'documents/frontend/' && echo "frontend_changed=true" >> $GITHUB_OUTPUT
+
+      - name: Process backend documents
+        if: steps.check-files.outputs.backend_changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Processing backend documents..."
+          for file in documents/backend/*.md; do
+            if [ -f "$file" ]; then
+              echo "Validating backend file: $file"
+              if ./script/validate-entb.sh "$file"; then
+                echo "Parsing backend file: $file"
+                ./script/parsing-entb.sh "$file"
+              else
+                echo "Validation failed for $file"
+              fi
+            fi
+          done
+
+      - name: Process frontend documents
+        if: steps.check-files.outputs.frontend_changed == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Processing frontend documents..."
+          for file in documents/frontend/*.md; do
+            if [ -f "$file" ]; then
+              echo "Validating frontend file: $file"
+              if ./script/validate-entf.sh "$file"; then
+                echo "Parsing frontend file: $file"
+                ./script/parsing-entf.sh "$file"
+              else
+                echo "Validation failed for $file"
+              fi
+            fi
+          done
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add documents/api/ documents/component/ documents/function/
+          git diff --staged --quiet || git commit -m "자동 문서 생성: $(date +%Y-%m-%d)"
+          git push || echo "Unable to push changes. You may need to set permissions for this repository."
